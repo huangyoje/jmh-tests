@@ -101,7 +101,22 @@ public class CompressJMH {
         return outputStream.size();
     }
 
-
+    /*
+     * ============================== HOW TO RUN THIS TEST: ====================================
+     *
+     * You can see the cold scenario is running longer, because we pay for
+     * thread wakeups.
+     *
+     * You can run this test:
+     *
+     * a) Via the command line:
+     *    $ gradle clean build
+     *    $ java -jar build/libs/jmh-tests.jar CompressJMH
+     *
+     * b) Via the Java API:
+     *    (see the JMH homepage for possible caveats when running from IDE:
+     *      http://openjdk.java.net/projects/code-tools/jmh/)
+     */
     public static void main(String[] args) throws RunnerException {
         Options opt = new OptionsBuilder()
                 .include(CompressJMH.class.getSimpleName())
