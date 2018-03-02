@@ -4,6 +4,7 @@ import net.jpountz.lz4.LZ4BlockOutputStream;
 import net.jpountz.lz4.LZ4Compressor;
 import net.jpountz.lz4.LZ4Factory;
 import net.jpountz.lz4.LZ4FastDecompressor;
+import net.jpountz.xxhash.XXHashFactory;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -40,6 +41,12 @@ public class CompressJMH {
 
     private static int byteSize = 5 * 1024 * 1024;
 
+    /**
+     * @see LZ4Factory
+     * All methods from this class are very costly, so you should get an instance
+     * once, and then reuse it whenever possible. This is typically done by storing
+     * a {@link LZ4Factory} instance in a static field.
+     */
     @State(Scope.Benchmark)
     public static class LZ4FactorySupplier {
         LZ4Factory lz4Factory;
@@ -54,14 +61,53 @@ public class CompressJMH {
         }
     }
 
+    /**
+     * @see XXHashFactory
+     * All methods from this class are very costly, so you should get an instance
+     * once, and then reuse it whenever possible. This is typically done by storing
+     * a {@link XXHashFactory} instance in a static field.
+     */
+    @State(Scope.Benchmark)
+    public static class XXHashFactorySupplier {
+        XXHashFactory xxHashFactory;
+
+        @Setup
+        public void up() {
+            xxHashFactory = XXHashFactory.fastestInstance();
+        }
+    }
+
     @State(Scope.Thread)
     public static class ByteSupplier {
         byte[] buffer;
 
         @Setup
         public void up() {
-            buffer = new byte[byteSize];
+            String size = System.getProperty("byte.size", String.valueOf(1024*1024));
+            buffer = new byte[Integer.parseInt(size)];
             Arrays.fill(buffer, (byte) 1);
+        }
+    }
+
+    @State(Scope.Benchmark)
+    public static class LZ4StreamBlockSize {
+        int blockSize;
+
+        @Setup
+        public void up() {
+            String size = System.getProperty("lz4.blocksize", String.valueOf(1 << 16));
+            blockSize = Integer.parseInt(size);
+        }
+    }
+
+    @State(Scope.Benchmark)
+    public static class SnappyStreamBlockSize {
+        int blockSize;
+
+        @Setup
+        public void up() {
+            String size = System.getProperty("snappy.blocksize", String.valueOf(32 * 1024));
+            blockSize = Integer.parseInt(size);
         }
     }
 
@@ -78,10 +124,12 @@ public class CompressJMH {
     }
 
     @Benchmark
-    public int lz4_stream(LZ4FactorySupplier lz4FactorySupplier, ByteSupplier byteSupplier) throws IOException {
+    public int lz4_stream(LZ4FactorySupplier lz4FactorySupplier, XXHashFactorySupplier xxHashFactorySupplier,
+            ByteSupplier byteSupplier, LZ4StreamBlockSize blockSize) throws IOException {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        LZ4BlockOutputStream lz4BlockOutputStream = new LZ4BlockOutputStream(outputStream, 1024 * 1024,
-                lz4FactorySupplier.lz4Compressor);
+        LZ4BlockOutputStream lz4BlockOutputStream = new LZ4BlockOutputStream(outputStream, blockSize.blockSize,
+                lz4FactorySupplier.lz4Compressor,
+                xxHashFactorySupplier.xxHashFactory.newStreamingHash32(0x9747b28c).asChecksum(), false);
         writeToStream(lz4BlockOutputStream, byteSupplier.buffer);
         return outputStream.size();
     }
@@ -94,9 +142,9 @@ public class CompressJMH {
     }
 
     @Benchmark
-    public int snappy_stream(ByteSupplier byteSupplier) throws IOException {
+    public int snappy_stream(ByteSupplier byteSupplier, SnappyStreamBlockSize blockSize) throws IOException {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        SnappyOutputStream snappyOutputStream = new SnappyOutputStream(outputStream, 32 * 1024);
+        SnappyOutputStream snappyOutputStream = new SnappyOutputStream(outputStream, blockSize.blockSize);
         writeToStream(snappyOutputStream, byteSupplier.buffer);
         return outputStream.size();
     }
@@ -111,19 +159,19 @@ public class CompressJMH {
      *
      * a) Via the command line:
      *    $ gradle clean build
-     *    $ java -jar build/libs/jmh-tests.jar CompressJMH
+     *    $ java -jar build/libs/jmh-tests.jar CompressJMH -jvmArgs "-Dlz4.blocksize=1024 -Dsnappy.blocksize=1024 -Dbyte
+     *    .size=1024"
      *
      * b) Via the Java API:
      *    (see the JMH homepage for possible caveats when running from IDE:
      *      http://openjdk.java.net/projects/code-tools/jmh/)
      */
     public static void main(String[] args) throws RunnerException {
-        Options opt = new OptionsBuilder()
-                .include(CompressJMH.class.getSimpleName())
+        Options opt = new OptionsBuilder().include(CompressJMH.class.getSimpleName())
+                .jvmArgsAppend("-Dbyte.size=1024")
                 .build();
 
         new Runner(opt).run();
     }
-
 
 }
