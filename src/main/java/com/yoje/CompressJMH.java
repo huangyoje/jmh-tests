@@ -39,8 +39,6 @@ import java.util.concurrent.TimeUnit;
 @BenchmarkMode(Mode.AverageTime)
 public class CompressJMH {
 
-    private static int byteSize = 5 * 1024 * 1024;
-
     /**
      * @see LZ4Factory
      * All methods from this class are very costly, so you should get an instance
@@ -83,8 +81,8 @@ public class CompressJMH {
 
         @Setup
         public void up() {
-            String size = System.getProperty("byte.size", String.valueOf(1024*1024));
-            buffer = new byte[Integer.parseInt(size)];
+            int size = Integer.getInteger("byte.size", 1024 * 1024);
+            buffer = new byte[size];
             Arrays.fill(buffer, (byte) 1);
         }
     }
@@ -95,8 +93,7 @@ public class CompressJMH {
 
         @Setup
         public void up() {
-            String size = System.getProperty("lz4.blocksize", String.valueOf(1 << 16));
-            blockSize = Integer.parseInt(size);
+            blockSize = Integer.getInteger("lz4.blocksize", 1 << 16);
         }
     }
 
@@ -106,8 +103,7 @@ public class CompressJMH {
 
         @Setup
         public void up() {
-            String size = System.getProperty("snappy.blocksize", String.valueOf(32 * 1024));
-            blockSize = Integer.parseInt(size);
+            blockSize = Integer.getInteger("snappy.blocksize", 32 * 1024);
         }
     }
 
@@ -168,7 +164,6 @@ public class CompressJMH {
      */
     public static void main(String[] args) throws RunnerException {
         Options opt = new OptionsBuilder().include(CompressJMH.class.getSimpleName())
-                .jvmArgsAppend("-Dbyte.size=1024")
                 .build();
 
         new Runner(opt).run();
